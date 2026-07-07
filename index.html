@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Task Manager</title>
+    <style>
+        :root {
+            --bg: #eef1f6;
+            --surface: #ffffff;
+            --surface-alt: #f4f6f9;
+            --border: #e0e4ea;
+            --text: #1f2733;
+            --text-muted: #6b7280;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-tint: #eaf1ff;
+            --danger: #e0384c;
+            --danger-tint: #fdeced;
+            --warning: #b8790a;
+            --warning-tint: #fdf3e0;
+            --success: #1a8a5f;
+            --success-tint: #e5f6ef;
+            --radius-lg: 12px;
+            --radius-md: 8px;
+            --radius-sm: 6px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #14161c;
+                --surface: #1d2027;
+                --surface-alt: #262a33;
+                --border: #343945;
+                --text: #e7e9ee;
+                --text-muted: #9aa1b0;
+                --primary: #4f8cff;
+                --primary-hover: #6ea0ff;
+                --primary-tint: #223050;
+                --danger: #ff6b7a;
+                --danger-tint: #3a2126;
+                --warning: #e3a13a;
+                --warning-tint: #3a301c;
+                --success: #3ecf8e;
+                --success-tint: #1c3a2c;
+            }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+        }
+
+        .page { max-width: 1180px; margin: 0 auto; padding: 0 24px 40px; }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 4px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 22px;
+        }
+        .brand { display: flex; align-items: center; gap: 8px; }
+        .brand-icon { font-size: 1.4rem; }
+        .brand-title { color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.25rem; }
+
+        .auth-section { display: flex; align-items: center; gap: 10px; }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+        .user-name { font-size: 0.9rem; color: var(--text-muted); }
+
+        .hidden { display: none !important; }
+
+        input, textarea, select {
+            background: var(--surface);
+            color: var(--text);
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            font-size: 14px;
+            font-family: inherit;
+            width: 100%;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-tint);
+        }
+        textarea { min-height: 160px; resize: vertical; line-height: 1.5; }
+
+        .field-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 4px; }
+        .field-label:first-child { margin-top: 0; }
+
+        .btn {
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            font-size: 14px;
+            padding: 9px 16px;
+            font-family: inherit;
+            transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+        }
+        .btn-block { width: 100%; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-ghost:hover { background: var(--surface-alt); color: var(--text); }
+
+        .btn-danger { background: var(--danger-tint); color: var(--danger); }
+        .btn-danger:hover { filter: brightness(0.95); }
+
+        ul { list-style: none; padding: 0; margin: 0; }
+
+        /* --- 2カラムレイアウト --- */
+        .app-layout {
+            display: flex;
+            align-items: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            align-self: stretch;
+            background: var(--surface-alt);
+            border-right: 1px solid var(--border);
+            padding: 18px 16px;
+            position: sticky;
+            top: 16px;
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
+        }
+
+        .sidebar-heading {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--text-muted);
+            margin: 22px 0 8px;
+        }
+        .sidebar-heading:first-of-type { margin-top: 4px; }
+
+        .sidebar-new-actions { margin-top: 10px; }
+
+        .task-list { display: flex; flex-direction: column; gap: 4px; }
+        .task-link {
+            display: block;
+            padding: 8px 8px;
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+        .task-link:hover { background: var(--primary-tint); }
+        .task-link.active { background: var(--primary); color: #fff; font-weight: 600; }
+        .task-link.active .badge { filter: brightness(1.15); }
+        .task-link-title { display: block; margin-bottom: 3px; }
+        .empty-state-sm { color: var(--text-muted); font-size: 0.82rem; padding: 6px 8px; }
+
+        .status-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            background: var(--surface);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+        .status-badge:hover { border-color: var(--primary); color: var(--primary); }
+        .status-badge.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .main-content { flex: 1; min-width: 0; padding: 30px 40px; }
+
+        /* --- バッジ共通 --- */
+        .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
+        .badge-todo { background: var(--surface-alt); color: var(--text-muted); border: 1px solid var(--border); }
+        .badge-in_progress { background: var(--warning-tint); color: var(--warning); }
+        .badge-done { background: var(--success-tint); color: var(--success); }
+        .badge-overdue { background: var(--danger-tint); color: var(--danger); }
+        .badge-due-soon { background: var(--warning-tint); color: var(--warning); }
+        .badge-due-normal { background: var(--surface-alt); color: var(--text-muted); border: 1px solid var(--border); }
+
+        /* --- ホーム --- */
+        .home-view h2 { margin-top: 0; }
+        .text-muted { color: var(--text-muted); }
+        .summary-row { display: flex; gap: 12px; margin: 16px 0 26px; }
+        .summary-tile {
+            flex: 1;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+        }
+        .summary-tile .count { font-size: 1.6rem; font-weight: 700; }
+        .summary-tile .label { font-size: 0.78rem; color: var(--text-muted); }
+        .attention-list { display: flex; flex-direction: column; gap: 8px; }
+        .attention-list a { color: var(--primary); text-decoration: none; font-weight: 600; }
+        .attention-list a:hover { text-decoration: underline; }
+        .attention-meta { color: var(--text-muted); font-size: 0.8rem; margin-left: 8px; }
+
+        /* --- タスク詳細 --- */
+        .task-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin: 0 0 10px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .task-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 18px; }
+        .task-description { color: var(--text); line-height: 1.7; white-space: pre-wrap; }
+        .task-meta { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.82rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; }
+        .task-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+
+        /* --- 投稿・編集フォーム --- */
+        .task-form { max-width: 640px; }
+        .form-row { display: flex; gap: 16px; }
+        .form-row > div { flex: 1; }
+        .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+        #msg { text-align: center; color: var(--text-muted); padding: 60px 16px; margin: 0; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-icon" aria-hidden="true">✅</span>
+            <a href="#/" class="brand-title">Group Task Manager</a>
+        </div>
+        <div class="auth-section">
+            <button id="login-btn" class="btn btn-primary">Googleでログイン</button>
+            <div id="user-info" class="user-info hidden">
+                <span id="user-name" class="user-name"></span>
+                <button id="logout-btn" class="btn btn-ghost btn-sm">ログアウト</button>
+            </div>
+        </div>
+    </header>
+
+    <div id="app-content" class="app-layout hidden">
+        <aside class="sidebar">
+            <input type="text" id="search-input" placeholder="タスクを検索">
+            <div class="sidebar-new-actions">
+                <button id="new-task-btn" class="btn btn-primary btn-block">＋ 新規タスク</button>
+            </div>
+
+            <h2 class="sidebar-heading">ステータス</h2>
+            <div id="status-filter" class="status-filter"></div>
+
+            <h2 class="sidebar-heading">タスク一覧</h2>
+            <ul id="task-list" class="task-list"></ul>
+        </aside>
+
+        <main id="main-content" class="main-content"></main>
+    </div>
+
+    <p id="msg">ログインしてください</p>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, query, onSnapshot, deleteDoc, updateDoc, doc, setDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Wikiプロジェクト（Kazuki-Murasawa.github.io）と同じFirebaseプロジェクトを共用する。
+    // コレクションは tasks / task_users を新設し、既存の wiki_* とは分離している。
+    const firebaseConfig = {
+        apiKey: "AIzaSyB6LzMo95UjoFkGncbRqU7Kis4fGCmK3Pw",
+        authDomain: "my-sync-todo.firebaseapp.com",
+        projectId: "my-sync-todo",
+        storageBucket: "my-sync-todo.firebasestorage.app",
+        messagingSenderId: "536879813996",
+        appId: "1:536879813996:web:ded67500cd6bdb80804f49"
+    };
+
+    const STATUS_LABELS = { todo: '未着手', in_progress: '進行中', done: '完了' };
+    const DUE_SOON_MS = 2 * 24 * 60 * 60 * 1000; // 2日以内を「期限間近」とする
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    let currentUser = null;
+    let unsubscribeTasks = null;
+    let unsubscribeUsers = null;
+    let currentTasks = [];
+    let currentMembers = [];
+
+    // --- 画面状態 ---
+    let selectedTaskId = null;
+    let isCreating = false;
+    let isEditingSelected = false;
+    let searchQuery = '';
+    let selectedStatusFilter = null;
+
+    // --- ハッシュルーティング（#/task/<id> / #/new） ---
+    function parseHash() {
+        const hash = location.hash;
+        selectedTaskId = null;
+        isCreating = false;
+
+        if (hash.startsWith('#/task/')) {
+            selectedTaskId = decodeURIComponent(hash.slice('#/task/'.length));
+        } else if (hash === '#/new') {
+            isCreating = true;
+        }
+        isEditingSelected = false;
+    }
+
+    window.addEventListener('hashchange', () => {
+        parseHash();
+        renderTaskList();
+        renderMain();
+    });
+    parseHash();
+
+    // --- ログイン・ログアウト処理 ---
+    document.getElementById('login-btn').onclick = () => signInWithPopup(auth, provider);
+    document.getElementById('logout-btn').onclick = () => signOut(auth);
+    document.getElementById('new-task-btn').onclick = () => { location.hash = '#/new'; };
+    document.getElementById('search-input').oninput = (e) => {
+        searchQuery = e.target.value;
+        renderTaskList();
+    };
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            showApp(user);
+            upsertMemberProfile(user);
+            fetchTasks();
+            fetchMembers();
+        } else {
+            currentUser = null;
+            hideApp();
+        }
+    });
+
+    function showApp(user) {
+        document.getElementById('login-btn').classList.add('hidden');
+        document.getElementById('user-info').classList.remove('hidden');
+        document.getElementById('user-name').innerText = user.displayName;
+        document.getElementById('app-content').classList.remove('hidden');
+        document.getElementById('msg').classList.add('hidden');
+    }
+
+    function hideApp() {
+        document.getElementById('login-btn').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+        document.getElementById('app-content').classList.add('hidden');
+        document.getElementById('msg').classList.remove('hidden');
+        currentTasks = [];
+        currentMembers = [];
+        searchQuery = '';
+        selectedStatusFilter = null;
+        document.getElementById('search-input').value = '';
+        document.getElementById('task-list').innerHTML = '';
+        document.getElementById('status-filter').innerHTML = '';
+        document.getElementById('main-content').innerHTML = '';
+        if (location.hash) location.hash = '';
+        if (unsubscribeTasks) unsubscribeTasks();
+        if (unsubscribeUsers) unsubscribeUsers();
+    }
+
+    // --- メンバー一覧（担当者アサインの選択肢として、ログインしたことがある全員を保持） ---
+
+    async function upsertMemberProfile(user) {
+        try {
+            await setDoc(doc(db, "task_users", user.uid), {
+                uid: user.uid,
+                displayName: user.displayName,
+                email: user.email,
+                updatedAt: new Date()
+            }, { merge: true });
+        } catch (error) {
+            console.error('メンバープロフィールの更新に失敗しました', error);
+        }
+    }
+
+    function fetchMembers() {
+        const q = query(collection(db, "task_users"));
+        unsubscribeUsers = onSnapshot(q, (snapshot) => {
+            currentMembers = snapshot.docs.map((doc) => doc.data());
+            renderMain();
+        });
+    }
+
+    // --- タスクの購読 ---
+
+    function fetchTasks() {
+        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+        unsubscribeTasks = onSnapshot(q, (snapshot) => {
+            currentTasks = snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+            renderTaskList();
+            renderMain();
+        });
+    }
+
+    // --- 期限判定 ---
+
+    function dueInfo(dueDate) {
+        if (!dueDate) return { label: '期限なし', className: 'badge-due-normal' };
+        const due = dueDate.toDate();
+        const now = new Date();
+        const diff = due.getTime() - now.getTime();
+        const label = due.toLocaleDateString();
+        if (diff < 0) return { label: `期限超過（${label}）`, className: 'badge-overdue' };
+        if (diff <= DUE_SOON_MS) return { label: `期限間近（${label}）`, className: 'badge-due-soon' };
+        return { label: `期限：${label}`, className: 'badge-due-normal' };
+    }
+
+    // --- サイドバー：タスク一覧 ---
+
+    function renderStatusFilterBar() {
+        const filterElement = document.getElementById('status-filter');
+        const allBadge = `<span class="status-badge${selectedStatusFilter === null ? ' active' : ''}" data-status="">すべて</span>`;
+        const statusBadges = Object.entries(STATUS_LABELS).map(([key, label]) =>
+            `<span class="status-badge${selectedStatusFilter === key ? ' active' : ''}" data-status="${key}">${label}</span>`
+        ).join('');
+        filterElement.innerHTML = allBadge + statusBadges;
+    }
+
+    document.getElementById('app-content').addEventListener('click', (e) => {
+        const badge = e.target.closest('.status-badge');
+        if (!badge) return;
+        selectedStatusFilter = badge.dataset.status || null;
+        renderTaskList();
+        renderStatusFilterBar();
+    });
+
+    function renderTaskList() {
+        const listElement = document.getElementById('task-list');
+        const q = searchQuery.trim().toLowerCase();
+
+        let tasks = currentTasks;
+        if (selectedStatusFilter) tasks = tasks.filter(({ data }) => data.status === selectedStatusFilter);
+        if (q) tasks = tasks.filter(({ data }) => data.title.toLowerCase().includes(q) || (data.description || '').toLowerCase().includes(q));
+
+        // 期限が近い順（期限なしは末尾）に並べる
+        tasks = [...tasks].sort((a, b) => {
+            const aTime = a.data.dueDate ? a.data.dueDate.toMillis() : Infinity;
+            const bTime = b.data.dueDate ? b.data.dueDate.toMillis() : Infinity;
+            return aTime - bTime;
+        });
+
+        if (tasks.length === 0) {
+            listElement.innerHTML = '<li class="empty-state-sm">該当するタスクがありません</li>';
+            return;
+        }
+
+        listElement.innerHTML = tasks.map(({ id, data }) => {
+            const due = dueInfo(data.dueDate);
+            return `<li>
+                <a href="#/task/${id}" class="task-link${id === selectedTaskId ? ' active' : ''}">
+                    <span class="task-link-title">${escapeHtml(data.title)}</span>
+                    <span class="badge badge-${data.status}">${STATUS_LABELS[data.status]}</span>
+                    <span class="badge ${due.className}">${due.label}</span>
+                </a>
+            </li>`;
+        }).join('');
+    }
+
+    // --- メインエリア ---
+
+    function renderMain() {
+        const mainElement = document.getElementById('main-content');
+
+        if (isCreating) {
+            mainElement.innerHTML = renderTaskFormPage();
+            return;
+        }
+
+        const task = selectedTaskId ? currentTasks.find((t) => t.id === selectedTaskId) : null;
+        if (!task) {
+            mainElement.innerHTML = renderHome();
+            return;
+        }
+
+        mainElement.innerHTML = isEditingSelected
+            ? renderTaskFormPage(task.id, task.data)
+            : renderTaskView(task.id, task.data);
+    }
+
+    function renderHome() {
+        const counts = { todo: 0, in_progress: 0, done: 0 };
+        currentTasks.forEach(({ data }) => { counts[data.status] = (counts[data.status] || 0) + 1; });
+
+        const attention = currentTasks
+            .filter(({ data }) => data.status !== 'done' && data.dueDate)
+            .map((t) => ({ ...t, due: dueInfo(t.data.dueDate) }))
+            .filter((t) => t.due.className === 'badge-overdue' || t.due.className === 'badge-due-soon')
+            .sort((a, b) => a.data.dueDate.toMillis() - b.data.dueDate.toMillis());
+
+        const attentionHtml = attention.length > 0
+            ? `<ul class="attention-list">${attention.map(({ id, data, due }) =>
+                `<li><a href="#/task/${id}">${escapeHtml(data.title)}</a><span class="badge ${due.className}">${due.label}</span><span class="attention-meta">${escapeHtml(data.assigneeName || '未アサイン')}</span></li>`
+              ).join('')}</ul>`
+            : '<p class="text-muted">期限が近い・超過しているタスクはありません。</p>';
+
+        return `
+            <div class="home-view">
+                <h2>ようこそ、Group Task Managerへ</h2>
+                <p class="text-muted">左のタスク一覧から選択するか、「＋ 新規タスク」で作成してください。</p>
+                <div class="summary-row">
+                    <div class="summary-tile"><div class="count">${counts.todo || 0}</div><div class="label">未着手</div></div>
+                    <div class="summary-tile"><div class="count">${counts.in_progress || 0}</div><div class="label">進行中</div></div>
+                    <div class="summary-tile"><div class="count">${counts.done || 0}</div><div class="label">完了</div></div>
+                </div>
+                <h3 class="sidebar-heading" style="margin-left: 0;">要注意（期限間近・超過）</h3>
+                ${attentionHtml}
+            </div>
+        `;
+    }
+
+    function renderTaskView(id, data) {
+        const due = dueInfo(data.dueDate);
+        return `
+            <article>
+                <h1 class="task-title">${escapeHtml(data.title)}</h1>
+                <div class="task-badges">
+                    <span class="badge badge-${data.status}">${STATUS_LABELS[data.status]}</span>
+                    <span class="badge ${due.className}">${due.label}</span>
+                </div>
+                <div class="task-description">${escapeHtml(data.description || '（説明なし）')}</div>
+                <div class="task-meta">
+                    <span>担当者: <strong>${escapeHtml(data.assigneeName || '未アサイン')}</strong></span>
+                    <span>作成者: ${escapeHtml(data.creatorName || '不明')} | ${data.createdAt?.toDate().toLocaleString()}</span>
+                </div>
+                <div class="task-actions">
+                    <button onclick="startEdit('${id}')" class="btn btn-ghost btn-sm">編集する</button>
+                    <button onclick="deleteTask('${id}')" class="btn btn-danger btn-sm">削除する</button>
+                </div>
+            </article>
+        `;
+    }
+
+    function renderMemberSelectOptions(selectedUid) {
+        const options = [...currentMembers]
+            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'))
+            .map((m) => `<option value="${m.uid}"${m.uid === selectedUid ? ' selected' : ''}>${escapeHtml(m.displayName)}</option>`);
+        return `<option value=""${!selectedUid ? ' selected' : ''}>（未アサイン）</option>` + options.join('');
+    }
+
+    function renderStatusSelectOptions(selectedStatus) {
+        return Object.entries(STATUS_LABELS).map(([key, label]) =>
+            `<option value="${key}"${key === selectedStatus ? ' selected' : ''}>${label}</option>`
+        ).join('');
+    }
+
+    function toDateInputValue(dueDate) {
+        if (!dueDate) return '';
+        const d = dueDate.toDate();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function renderTaskFormPage(id, data) {
+        const isEdit = Boolean(id);
+        const idSuffix = isEdit ? id : 'new';
+        const title = isEdit ? data.title : '';
+        const description = isEdit ? (data.description || '') : '';
+        const status = isEdit ? data.status : 'todo';
+        const assigneeUid = isEdit ? (data.assigneeUid || '') : '';
+        const dueValue = isEdit ? toDateInputValue(data.dueDate) : '';
+        const onCancelAttr = isEdit ? 'cancelEdit()' : 'cancelNew()';
+        const onSaveAttr = isEdit ? `saveEdit('${id}')` : 'submitNewTask()';
+        const submitLabel = isEdit ? '保存する' : '作成する';
+
+        return `
+            <h2>${isEdit ? 'タスクを編集' : '新規タスクを作成'}</h2>
+            <div class="task-form">
+                <label class="field-label" for="task-title-${idSuffix}">タイトル</label>
+                <input type="text" id="task-title-${idSuffix}" value="${escapeAttr(title)}">
+
+                <label class="field-label" for="task-description-${idSuffix}">説明</label>
+                <textarea id="task-description-${idSuffix}">${escapeHtml(description)}</textarea>
+
+                <div class="form-row">
+                    <div>
+                        <label class="field-label" for="task-status-${idSuffix}">ステータス</label>
+                        <select id="task-status-${idSuffix}">${renderStatusSelectOptions(status)}</select>
+                    </div>
+                    <div>
+                        <label class="field-label" for="task-assignee-${idSuffix}">担当者</label>
+                        <select id="task-assignee-${idSuffix}">${renderMemberSelectOptions(assigneeUid)}</select>
+                    </div>
+                </div>
+
+                <label class="field-label" for="task-due-${idSuffix}">期限</label>
+                <input type="date" id="task-due-${idSuffix}" value="${dueValue}">
+
+                <div class="form-actions">
+                    <button onclick="${onCancelAttr}" class="btn btn-ghost">キャンセル</button>
+                    <button onclick="${onSaveAttr}" class="btn btn-primary">${submitLabel}</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function escapeAttr(text) {
+        return escapeHtml(text || '').replace(/"/g, '&quot;');
+    }
+
+    function readTaskFormValues(idSuffix) {
+        const title = document.getElementById(`task-title-${idSuffix}`).value.trim();
+        const description = document.getElementById(`task-description-${idSuffix}`).value;
+        const status = document.getElementById(`task-status-${idSuffix}`).value;
+        const assigneeUid = document.getElementById(`task-assignee-${idSuffix}`).value || null;
+        const assigneeName = assigneeUid ? (currentMembers.find((m) => m.uid === assigneeUid)?.displayName || null) : null;
+        const dueRaw = document.getElementById(`task-due-${idSuffix}`).value;
+        const dueDate = dueRaw ? new Date(`${dueRaw}T00:00:00`) : null;
+        return { title, description, status, assigneeUid, assigneeName, dueDate };
+    }
+
+    // --- タスクの作成・編集・削除（グループ共同編集：ログイン済みなら誰でも編集・削除・ステータス変更可） ---
+
+    window.submitNewTask = async () => {
+        const values = readTaskFormValues('new');
+        if (!values.title || !currentUser) return;
+
+        try {
+            const docRef = await addDoc(collection(db, "tasks"), {
+                ...values,
+                creatorUid: currentUser.uid,
+                creatorName: currentUser.displayName,
+                createdAt: new Date()
+            });
+            location.hash = `#/task/${docRef.id}`;
+        } catch (error) {
+            alert('タスクの作成に失敗しました: ' + error.message);
+        }
+    };
+
+    window.cancelNew = () => { location.hash = ''; };
+
+    window.startEdit = (id) => {
+        if (!currentUser) return;
+        isEditingSelected = true;
+        renderMain();
+    };
+
+    window.cancelEdit = () => {
+        isEditingSelected = false;
+        renderMain();
+    };
+
+    window.saveEdit = async (id) => {
+        if (!currentUser) return;
+        const values = readTaskFormValues(id);
+        if (!values.title) return;
+
+        try {
+            await updateDoc(doc(db, "tasks", id), { ...values, updatedAt: new Date() });
+            isEditingSelected = false;
+            renderMain();
+        } catch (error) {
+            alert('タスクの更新に失敗しました: ' + error.message);
+        }
+    };
+
+    window.deleteTask = async (id) => {
+        if (!currentUser) return;
+        if (!confirm('このタスクを削除しますか？')) return;
+
+        try {
+            await deleteDoc(doc(db, "tasks", id));
+            if (selectedTaskId === id) location.hash = '';
+        } catch (error) {
+            alert('タスクの削除に失敗しました: ' + error.message);
+        }
+    };
+</script>
+</body>
+</html>
