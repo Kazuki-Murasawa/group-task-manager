@@ -4,6 +4,7 @@
 ここを読めば現状と次にやることが分かるようにする。詳細な実装の経緯より「今の構造がどうなっているか」を優先して書く。
 
 **現状（2026-07-07時点）: `index.html` 実装済み・動作確認完了（タスク作成成功）。**
+**本番URL: https://kazuki-murasawa.github.io/group-task-manager/ （GitHub Pages、`main` ブランチのルートから配信）**
 姉妹プロジェクトの社内Wiki（`Kazuki-Murasawa.github.io`リポジトリ）と同じ技術スタック・
 実装ノウハウを流用して構築した。Firebaseプロジェクトは新規作成せずWikiと共用（`my-sync-todo`）。
 
