@@ -188,6 +188,29 @@
         .chip:hover { border-color: var(--primary); color: var(--primary-text); }
         .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+        /* --- 表示切り替えトグル（リスト/ボード） --- */
+        .view-toggle {
+            display: flex;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            flex: 0 0 auto;
+            margin-left: auto;
+        }
+        .view-toggle-btn {
+            background: var(--surface);
+            color: var(--text-muted);
+            border: none;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .view-toggle-btn + .view-toggle-btn { border-left: 1px solid var(--border); }
+        .view-toggle-btn:hover { background: var(--surface-alt); color: var(--text); }
+        .view-toggle-btn.active { background: var(--primary); color: #fff; }
+
         /* --- バッジ --- */
         .badge {
             display: inline-flex;
@@ -205,6 +228,7 @@
         .badge-overdue { background: var(--danger-tint); color: var(--danger-text); }
         .badge-due-soon { background: var(--warning-tint); color: var(--warning-text); }
         .badge-due-normal { background: transparent; color: var(--text-muted); }
+        .badge-category { background: var(--primary-tint); color: var(--primary-text); }
 
         /* --- タスクテーブル --- */
         .table-card {
@@ -236,6 +260,7 @@
         .task-table tr.row-done .cell-title .task-name { color: var(--text-muted); text-decoration: line-through; }
 
         .cell-title .task-name { font-weight: 600; }
+        .cell-title .badge-category { margin-left: 8px; vertical-align: middle; }
         .cell-title .task-desc {
             display: block;
             color: var(--text-muted);
@@ -270,6 +295,61 @@
 
         .empty-state { text-align: center; padding: 70px 16px; color: var(--text-muted); }
         .empty-state .hero-icon { font-size: 2.4rem; display: block; margin-bottom: 10px; }
+
+        /* --- カンバンボード --- */
+        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+        .board-column {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .board-column-header {
+            padding: 12px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: var(--surface-alt);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .board-count {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.72rem;
+            padding: 1px 8px;
+        }
+        .board-column-body {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 60px;
+            transition: background-color .15s ease;
+        }
+        .board-column-body.drag-over { background: var(--primary-tint); }
+        .board-empty { text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 16px 0; }
+        .board-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .board-card:hover { border-color: var(--primary); }
+        .board-card.dragging { opacity: 0.5; }
+        .board-card-title { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; }
+        .board-card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+        .board-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+        .board-card-select { width: auto; align-self: flex-start; }
 
         /* --- モーダル（詳細・編集・新規） --- */
         .modal-overlay {
@@ -322,6 +402,20 @@
         .form-row > div { flex: 1; }
         .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
+        /* --- カテゴリ管理モーダル --- */
+        .category-manage-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 16px; max-height: 40vh; overflow-y: auto; }
+        .category-manage-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--surface-alt);
+            border-radius: var(--radius-sm);
+        }
+        .category-manage-add { display: flex; gap: 8px; }
+        .category-manage-add input { flex: 1; }
+
         /* --- モバイル：テーブル→カード --- */
         @media (max-width: 720px) {
             .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -334,6 +428,7 @@
             .cell-status, .cell-assignee, .cell-due { display: inline-block !important; width: auto !important; margin-right: 10px; }
             .form-row { flex-direction: column; gap: 0; }
             .user-name { display: none; }
+            .board { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -368,9 +463,15 @@
             <div class="search-box"><input type="text" id="search-input" placeholder="タスクを検索"></div>
             <div id="status-chips" class="chip-group"></div>
             <select id="assignee-filter" title="担当者で絞り込み"></select>
+            <select id="category-filter" title="カテゴリで絞り込み"></select>
+            <button id="manage-categories-btn" class="btn btn-ghost btn-sm">カテゴリ管理</button>
+            <div class="view-toggle" id="view-toggle">
+                <button class="view-toggle-btn" data-view="list">☰ リスト</button>
+                <button class="view-toggle-btn" data-view="board">▦ ボード</button>
+            </div>
         </div>
 
-        <div class="table-card">
+        <div class="table-card" id="table-card">
             <table class="task-table">
                 <thead>
                     <tr>
@@ -382,8 +483,24 @@
                 </thead>
                 <tbody id="task-tbody"></tbody>
             </table>
-            <div id="empty-state" class="empty-state hidden"></div>
         </div>
+
+        <div class="board hidden" id="board-view">
+            <div class="board-column">
+                <div class="board-column-header">未着手 <span class="board-count" data-status="todo">0</span></div>
+                <div class="board-column-body" data-status="todo"></div>
+            </div>
+            <div class="board-column">
+                <div class="board-column-header">進行中 <span class="board-count" data-status="in_progress">0</span></div>
+                <div class="board-column-body" data-status="in_progress"></div>
+            </div>
+            <div class="board-column">
+                <div class="board-column-header">完了 <span class="board-count" data-status="done">0</span></div>
+                <div class="board-column-body" data-status="done"></div>
+            </div>
+        </div>
+
+        <div id="empty-state" class="empty-state hidden"></div>
     </div>
 </div>
 
@@ -418,27 +535,35 @@
     let currentUser = null;
     let unsubscribeTasks = null;
     let unsubscribeUsers = null;
+    let unsubscribeCategories = null;
     let currentTasks = [];
     let currentMembers = [];
+    let currentCategories = []; // { id, name } の配列。事前登録制（categoriesコレクション）
 
     // --- 画面状態 ---
     let selectedTaskId = null;      // '#/task/<id>' で詳細モーダルを開く
     let isCreating = false;         // '#/new' で新規作成モーダルを開く
+    let isManagingCategories = false; // '#/categories' でカテゴリ管理モーダルを開く
     let isEditingSelected = false;
     let searchQuery = '';
     let statusFilter = null;        // null | 'todo' | 'in_progress' | 'done' | 'attention'
     let assigneeFilter = '';        // '' = 全員 | 'none' = 未アサイン | uid
+    let categoryFilter = '';        // '' = すべて | 'none' = 未分類 | カテゴリ文字列
+    let viewMode = localStorage.getItem('gtm_view_mode') === 'board' ? 'board' : 'list'; // 'list' | 'board'
 
-    // --- ハッシュルーティング（#/task/<id> / #/new） ---
+    // --- ハッシュルーティング（#/task/<id> / #/new / #/categories） ---
     function parseHash() {
         const hash = location.hash;
         selectedTaskId = null;
         isCreating = false;
+        isManagingCategories = false;
 
         if (hash.startsWith('#/task/')) {
             selectedTaskId = decodeURIComponent(hash.slice('#/task/'.length));
         } else if (hash === '#/new') {
             isCreating = true;
+        } else if (hash === '#/categories') {
+            isManagingCategories = true;
         }
         isEditingSelected = false;
     }
@@ -455,19 +580,29 @@
     document.getElementById('new-task-btn').onclick = () => { location.hash = '#/new'; };
     document.getElementById('search-input').oninput = (e) => {
         searchQuery = e.target.value;
-        renderTable();
+        renderView();
     };
     document.getElementById('assignee-filter').onchange = (e) => {
         assigneeFilter = e.target.value;
-        renderTable();
+        renderView();
     };
+    document.getElementById('category-filter').onchange = (e) => {
+        categoryFilter = e.target.value;
+        renderView();
+    };
+    document.getElementById('manage-categories-btn').onclick = () => { location.hash = '#/categories'; };
+    document.getElementById('view-toggle').addEventListener('click', (e) => {
+        const btn = e.target.closest('.view-toggle-btn');
+        if (!btn) return;
+        setViewMode(btn.dataset.view);
+    });
 
     // モーダル：オーバーレイクリック・Escで閉じる
     document.getElementById('modal-overlay').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) closeModal();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && (selectedTaskId || isCreating)) closeModal();
+        if (e.key === 'Escape' && (selectedTaskId || isCreating || isManagingCategories)) closeModal();
     });
     window.closeModal = () => {
         if (location.hash) location.hash = '';
@@ -480,6 +615,7 @@
             upsertMemberProfile(user);
             fetchTasks();
             fetchMembers();
+            fetchCategories();
         } else {
             currentUser = null;
             hideApp();
@@ -501,15 +637,18 @@
         document.getElementById('app-content').classList.add('hidden');
         currentTasks = [];
         currentMembers = [];
+        currentCategories = [];
         searchQuery = '';
         statusFilter = null;
         assigneeFilter = '';
+        categoryFilter = '';
         document.getElementById('search-input').value = '';
         document.getElementById('task-tbody').innerHTML = '';
         document.getElementById('modal-overlay').classList.add('hidden');
         if (location.hash) location.hash = '';
         if (unsubscribeTasks) unsubscribeTasks();
         if (unsubscribeUsers) unsubscribeUsers();
+        if (unsubscribeCategories) unsubscribeCategories();
     }
 
     // --- メンバー一覧（担当者アサインの選択肢として、ログインしたことがある全員を保持） ---
@@ -535,6 +674,43 @@
             renderModal();
         });
     }
+
+    // --- カテゴリ一覧（事前登録制。categoriesコレクションをグループで共有） ---
+
+    function fetchCategories() {
+        const q = query(collection(db, "categories"), orderBy("name"));
+        unsubscribeCategories = onSnapshot(q, (snapshot) => {
+            currentCategories = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            renderCategoryFilter();
+            renderModal();
+        });
+    }
+
+    window.addCategory = async () => {
+        if (!currentUser) return;
+        const input = document.getElementById('new-category-input');
+        const name = input.value.trim();
+        if (!name || currentCategories.some((c) => c.name === name)) {
+            input.value = '';
+            return;
+        }
+        try {
+            await addDoc(collection(db, "categories"), { name, creatorUid: currentUser.uid, createdAt: new Date() });
+            input.value = '';
+        } catch (error) {
+            alert('カテゴリの追加に失敗しました: ' + error.message);
+        }
+    };
+
+    window.deleteCategory = async (id) => {
+        if (!currentUser) return;
+        if (!confirm('このカテゴリを削除しますか？（すでに設定済みのタスクの表示は残ります）')) return;
+        try {
+            await deleteDoc(doc(db, "categories", id));
+        } catch (error) {
+            alert('カテゴリの削除に失敗しました: ' + error.message);
+        }
+    };
 
     // --- タスクの購読 ---
 
@@ -578,8 +754,48 @@
         renderKpiRow();
         renderStatusChips();
         renderAssigneeFilter();
-        renderTable();
+        renderCategoryFilter();
+        renderViewToggle();
+        renderView();
         renderModal();
+    }
+
+    // --- 表示切り替え（リスト⇔ボード） ---
+
+    function setViewMode(mode) {
+        if (viewMode === mode) return;
+        viewMode = mode;
+        localStorage.setItem('gtm_view_mode', mode);
+        renderViewToggle();
+        renderView();
+    }
+
+    function renderViewToggle() {
+        document.querySelectorAll('.view-toggle-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.view === viewMode);
+        });
+        // ボード表示は列自体がステータスを表すため、重複するステータスチップ絞り込みは隠す
+        document.getElementById('status-chips').classList.toggle('hidden', viewMode === 'board');
+    }
+
+    function renderView() {
+        const tasks = visibleTasks();
+        const emptyElement = document.getElementById('empty-state');
+        const isListView = viewMode === 'list';
+        document.getElementById('table-card').classList.toggle('hidden', !isListView || tasks.length === 0);
+        document.getElementById('board-view').classList.toggle('hidden', isListView || tasks.length === 0);
+
+        if (tasks.length === 0) {
+            const hasAny = currentTasks.length > 0;
+            emptyElement.innerHTML = hasAny
+                ? '<span class="hero-icon" aria-hidden="true">🔍</span>該当するタスクがありません。絞り込みを解除してみてください。'
+                : '<span class="hero-icon" aria-hidden="true">🎉</span>まだタスクがありません。「＋ 新規タスク」から最初のタスクを作りましょう。';
+            emptyElement.classList.remove('hidden');
+            return;
+        }
+        emptyElement.classList.add('hidden');
+
+        if (isListView) renderTable(tasks); else renderBoard(tasks);
     }
 
     // --- KPI行（クリックで絞り込み） ---
@@ -611,7 +827,7 @@
         statusFilter = statusFilter === tile.dataset.filter ? null : tile.dataset.filter;
         renderKpiRow();
         renderStatusChips();
-        renderTable();
+        renderView();
     });
 
     // --- ステータスチップ ---
@@ -630,7 +846,7 @@
         statusFilter = chip.dataset.status || null;
         renderKpiRow();
         renderStatusChips();
-        renderTable();
+        renderView();
     });
 
     // --- 担当者フィルタ ---
@@ -642,6 +858,14 @@
             + members.map((m) => `<option value="${m.uid}"${assigneeFilter === m.uid ? ' selected' : ''}>${escapeHtml(m.displayName)}</option>`).join('');
     }
 
+    // --- カテゴリフィルタ（事前登録済みのcategoriesコレクションを選択肢にする） ---
+
+    function renderCategoryFilter() {
+        const select = document.getElementById('category-filter');
+        select.innerHTML = `<option value="">カテゴリ: すべて</option><option value="none"${categoryFilter === 'none' ? ' selected' : ''}>未分類</option>`
+            + currentCategories.map((c) => `<option value="${escapeAttr(c.name)}"${categoryFilter === c.name ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    }
+
     // --- タスクテーブル ---
 
     function visibleTasks() {
@@ -651,6 +875,8 @@
         else if (statusFilter) tasks = tasks.filter(({ data }) => data.status === statusFilter);
         if (assigneeFilter === 'none') tasks = tasks.filter(({ data }) => !data.assigneeUid);
         else if (assigneeFilter) tasks = tasks.filter(({ data }) => data.assigneeUid === assigneeFilter);
+        if (categoryFilter === 'none') tasks = tasks.filter(({ data }) => !data.category);
+        else if (categoryFilter) tasks = tasks.filter(({ data }) => data.category === categoryFilter);
         if (q) tasks = tasks.filter(({ data }) => data.title.toLowerCase().includes(q) || (data.description || '').toLowerCase().includes(q));
 
         // 完了は末尾へ。未完了は期限が近い順（期限なしは後ろ）、完了は更新が新しい順
@@ -669,22 +895,8 @@
         });
     }
 
-    function renderTable() {
+    function renderTable(tasks) {
         const tbody = document.getElementById('task-tbody');
-        const emptyElement = document.getElementById('empty-state');
-        const tasks = visibleTasks();
-
-        if (tasks.length === 0) {
-            tbody.innerHTML = '';
-            const hasAny = currentTasks.length > 0;
-            emptyElement.innerHTML = hasAny
-                ? '<span class="hero-icon" aria-hidden="true">🔍</span>該当するタスクがありません。絞り込みを解除してみてください。'
-                : '<span class="hero-icon" aria-hidden="true">🎉</span>まだタスクがありません。「＋ 新規タスク」から最初のタスクを作りましょう。';
-            emptyElement.classList.remove('hidden');
-            return;
-        }
-        emptyElement.classList.add('hidden');
-
         tbody.innerHTML = tasks.map(({ id, data }) => {
             const due = dueInfo(data);
             const descSnippet = (data.description || '').split('\n')[0];
@@ -693,6 +905,7 @@
             return `<tr data-id="${id}" class="${data.status === 'done' ? 'row-done' : ''}">
                 <td class="cell-title">
                     <span class="task-name">${escapeHtml(data.title)}</span>
+                    ${data.category ? `<span class="badge badge-category">${escapeHtml(data.category)}</span>` : ''}
                     ${descSnippet ? `<span class="task-desc">${escapeHtml(descSnippet)}</span>` : ''}
                 </td>
                 <td class="cell-status">
@@ -711,14 +924,93 @@
         if (row) location.hash = `#/task/${row.dataset.id}`;
     });
 
-    document.getElementById('task-tbody').addEventListener('change', async (e) => {
+    document.getElementById('task-tbody').addEventListener('change', (e) => {
         const select = e.target.closest('.status-select');
         if (!select || !currentUser) return;
+        updateTaskStatus(select.dataset.id, select.value);
+    });
+
+    async function updateTaskStatus(id, status) {
         try {
-            await updateDoc(doc(db, "tasks", select.dataset.id), { status: select.value, updatedAt: new Date() });
+            await updateDoc(doc(db, "tasks", id), { status, updatedAt: new Date() });
         } catch (error) {
             alert('ステータスの更新に失敗しました: ' + error.message);
         }
+    }
+
+    // --- カンバンボード ---
+
+    function renderBoard(tasks) {
+        const grouped = { todo: [], in_progress: [], done: [] };
+        tasks.forEach((t) => grouped[t.data.status]?.push(t));
+
+        Object.keys(STATUS_LABELS).forEach((statusKey) => {
+            const body = document.querySelector(`.board-column-body[data-status="${statusKey}"]`);
+            const countEl = document.querySelector(`.board-count[data-status="${statusKey}"]`);
+            const list = grouped[statusKey];
+            countEl.textContent = list.length;
+
+            if (list.length === 0) {
+                body.innerHTML = '<div class="board-empty">タスクなし</div>';
+                return;
+            }
+            body.innerHTML = list.map(({ id, data }) => {
+                const due = dueInfo(data);
+                const statusOptions = Object.entries(STATUS_LABELS).map(([key, label]) =>
+                    `<option value="${key}"${key === data.status ? ' selected' : ''}>${label}</option>`).join('');
+                return `<div class="board-card" draggable="true" data-id="${id}">
+                    <div class="board-card-title">${escapeHtml(data.title)}</div>
+                    ${data.category ? `<div class="board-card-badges"><span class="badge badge-category">${escapeHtml(data.category)}</span></div>` : ''}
+                    <div class="board-card-meta">
+                        <span class="cell-assignee${data.assigneeUid ? '' : ' unassigned'}">${escapeHtml(data.assigneeName || '未アサイン')}</span>
+                        <span class="badge ${due.className}">${due.label}</span>
+                    </div>
+                    <select class="status-select badge-${data.status} board-card-select" data-id="${id}" title="ステータスを変更">${statusOptions}</select>
+                </div>`;
+            }).join('');
+        });
+    }
+
+    // カードクリック→詳細モーダル／カード内セレクト→ステータス即時変更（スマホはD&D不可のため併設）
+    document.getElementById('board-view').addEventListener('click', (e) => {
+        if (e.target.closest('.status-select')) return;
+        const card = e.target.closest('.board-card[data-id]');
+        if (card) location.hash = `#/task/${card.dataset.id}`;
+    });
+
+    document.getElementById('board-view').addEventListener('change', (e) => {
+        const select = e.target.closest('.status-select');
+        if (!select || !currentUser) return;
+        updateTaskStatus(select.dataset.id, select.value);
+    });
+
+    // カードのドラッグ&ドロップで列間移動→ステータス更新
+    document.getElementById('board-view').addEventListener('dragstart', (e) => {
+        const card = e.target.closest('.board-card[data-id]');
+        if (!card) return;
+        e.dataTransfer.setData('text/plain', card.dataset.id);
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
+    });
+    document.getElementById('board-view').addEventListener('dragend', (e) => {
+        const card = e.target.closest('.board-card[data-id]');
+        if (card) card.classList.remove('dragging');
+    });
+
+    document.querySelectorAll('.board-column-body').forEach((body) => {
+        body.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            body.classList.add('drag-over');
+        });
+        body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+        body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            body.classList.remove('drag-over');
+            if (!currentUser) return;
+            const taskId = e.dataTransfer.getData('text/plain');
+            if (taskId) updateTaskStatus(taskId, body.dataset.status);
+        });
     });
 
     // --- モーダル（詳細・編集・新規作成） ---
@@ -733,13 +1025,18 @@
         const card = document.getElementById('modal-card');
 
         const task = selectedTaskId ? currentTasks.find((t) => t.id === selectedTaskId) : null;
-        const formSuffix = isCreating ? 'new' : (task && isEditingSelected ? task.id : null);
+        const formSuffix = isCreating ? 'new'
+            : isManagingCategories ? 'categories'
+            : (task && isEditingSelected ? task.id : null);
 
         if (formSuffix) {
             if (renderedFormSuffix === formSuffix) {
-                refreshAssigneeOptions(formSuffix);
+                if (formSuffix === 'categories') refreshCategoryManageList();
+                else refreshTaskFormDynamicOptions(formSuffix);
             } else {
-                card.innerHTML = isCreating ? renderTaskFormModal() : renderTaskFormModal(task.id, task.data);
+                card.innerHTML = isCreating ? renderTaskFormModal()
+                    : isManagingCategories ? renderCategoryManageModal()
+                    : renderTaskFormModal(task.id, task.data);
                 renderedFormSuffix = formSuffix;
             }
             overlay.classList.remove('hidden');
@@ -757,9 +1054,43 @@
         overlay.classList.remove('hidden');
     }
 
-    function refreshAssigneeOptions(idSuffix) {
-        const select = document.getElementById(`task-assignee-${idSuffix}`);
-        if (select) select.innerHTML = renderMemberSelectOptions(select.value || null);
+    function refreshTaskFormDynamicOptions(idSuffix) {
+        const assigneeSelect = document.getElementById(`task-assignee-${idSuffix}`);
+        if (assigneeSelect) assigneeSelect.innerHTML = renderMemberSelectOptions(assigneeSelect.value || null);
+        const categorySelect = document.getElementById(`task-category-${idSuffix}`);
+        if (categorySelect) categorySelect.innerHTML = renderCategorySelectOptions(categorySelect.value || null);
+    }
+
+    function renderCategoryManageListItems() {
+        if (currentCategories.length === 0) return '<p class="text-muted">まだカテゴリがありません。</p>';
+        return currentCategories.map((c) =>
+            `<div class="category-manage-row">
+                <span>${escapeHtml(c.name)}</span>
+                <button onclick="deleteCategory('${c.id}')" class="btn btn-danger btn-sm">削除</button>
+            </div>`
+        ).join('');
+    }
+
+    function refreshCategoryManageList() {
+        const list = document.getElementById('category-manage-list');
+        if (list) list.innerHTML = renderCategoryManageListItems();
+    }
+
+    function renderCategoryManageModal() {
+        return `
+            <div class="modal-header">
+                <h2>カテゴリ管理</h2>
+                <button class="modal-close" onclick="closeModal()" aria-label="閉じる">×</button>
+            </div>
+            <div id="category-manage-list" class="category-manage-list">${renderCategoryManageListItems()}</div>
+            <div class="category-manage-add">
+                <input type="text" id="new-category-input" placeholder="新しいカテゴリ名">
+                <button onclick="addCategory()" class="btn btn-primary btn-sm">追加</button>
+            </div>
+            <div class="form-actions">
+                <button onclick="closeModal()" class="btn btn-ghost">閉じる</button>
+            </div>
+        `;
     }
 
     function renderTaskViewModal(id, data) {
@@ -771,6 +1102,7 @@
             </div>
             <div class="task-badges">
                 <span class="badge badge-${data.status}">${STATUS_LABELS[data.status]}</span>
+                ${data.category ? `<span class="badge badge-category">${escapeHtml(data.category)}</span>` : ''}
                 <span class="badge ${due.className}">${due.kind === 'none' ? '期限なし' : due.label}</span>
             </div>
             <div class="task-description">${escapeHtml(data.description || '（説明なし）')}</div>
@@ -793,6 +1125,12 @@
         return `<option value=""${!selectedUid ? ' selected' : ''}>（未アサイン）</option>` + options.join('');
     }
 
+    function renderCategorySelectOptions(selectedName) {
+        const options = currentCategories.map((c) =>
+            `<option value="${escapeAttr(c.name)}"${c.name === selectedName ? ' selected' : ''}>${escapeHtml(c.name)}</option>`);
+        return `<option value=""${!selectedName ? ' selected' : ''}>（未分類）</option>` + options.join('');
+    }
+
     function renderStatusSelectOptions(selectedStatus) {
         return Object.entries(STATUS_LABELS).map(([key, label]) =>
             `<option value="${key}"${key === selectedStatus ? ' selected' : ''}>${label}</option>`
@@ -810,6 +1148,7 @@
         const isEdit = Boolean(id);
         const idSuffix = isEdit ? id : 'new';
         const title = isEdit ? data.title : '';
+        const category = isEdit ? (data.category || '') : '';
         const description = isEdit ? (data.description || '') : '';
         const status = isEdit ? data.status : 'todo';
         const assigneeUid = isEdit ? (data.assigneeUid || '') : '';
@@ -826,6 +1165,9 @@
             <div class="task-form">
                 <label class="field-label" for="task-title-${idSuffix}">タイトル</label>
                 <input type="text" id="task-title-${idSuffix}" value="${escapeAttr(title)}" placeholder="例：合宿の宿を予約する">
+
+                <label class="field-label" for="task-category-${idSuffix}">カテゴリ</label>
+                <select id="task-category-${idSuffix}">${renderCategorySelectOptions(category)}</select>
 
                 <label class="field-label" for="task-description-${idSuffix}">説明</label>
                 <textarea id="task-description-${idSuffix}" placeholder="補足やメモ（任意）">${escapeHtml(description)}</textarea>
@@ -864,13 +1206,14 @@
 
     function readTaskFormValues(idSuffix) {
         const title = document.getElementById(`task-title-${idSuffix}`).value.trim();
+        const category = document.getElementById(`task-category-${idSuffix}`).value.trim() || null;
         const description = document.getElementById(`task-description-${idSuffix}`).value;
         const status = document.getElementById(`task-status-${idSuffix}`).value;
         const assigneeUid = document.getElementById(`task-assignee-${idSuffix}`).value || null;
         const assigneeName = assigneeUid ? (currentMembers.find((m) => m.uid === assigneeUid)?.displayName || null) : null;
         const dueRaw = document.getElementById(`task-due-${idSuffix}`).value;
         const dueDate = dueRaw ? new Date(`${dueRaw}T00:00:00`) : null;
-        return { title, description, status, assigneeUid, assigneeName, dueDate };
+        return { title, category, description, status, assigneeUid, assigneeName, dueDate };
     }
 
     // --- タスクの作成・編集・削除（グループ共同編集：ログイン済みなら誰でも編集・削除・ステータス変更可） ---
