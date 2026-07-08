@@ -559,10 +559,11 @@
         if (data.status === 'done') return { kind: 'done', label: '✓ 完了', className: 'badge-done' };
         if (!data.dueDate) return { kind: 'none', label: '—', className: 'badge-due-normal' };
         const due = data.dueDate.toDate();
-        const diff = due.getTime() - Date.now();
         const label = fmtDate(due);
-        if (diff < 0) return { kind: 'overdue', label: `🔴 ${label} 超過`, className: 'badge-overdue' };
-        if (diff <= DUE_SOON_MS) return { kind: 'soon', label: `🟡 ${label} 間近`, className: 'badge-due-soon' };
+        // dueDateは期限日の0時で保存されるため、「超過」は期限日が丸ごと過ぎてから
+        const endOfDueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1);
+        if (Date.now() >= endOfDueDay.getTime()) return { kind: 'overdue', label: `🔴 ${label} 超過`, className: 'badge-overdue' };
+        if (due.getTime() - Date.now() <= DUE_SOON_MS) return { kind: 'soon', label: `🟡 ${label} 間近`, className: 'badge-due-soon' };
         return { kind: 'normal', label, className: 'badge-due-normal' };
     }
 
@@ -722,27 +723,43 @@
 
     // --- モーダル（詳細・編集・新規作成） ---
 
+    // 表示中のフォームのidサフィックス。Firestoreスナップショットのたびに renderModal() が
+    // 呼ばれるため、フォーム表示中に innerHTML を書き直すと入力中の内容が消える。
+    // 同じフォームを表示し続ける間は担当者の選択肢だけを最新化する。
+    let renderedFormSuffix = null;
+
     function renderModal() {
         const overlay = document.getElementById('modal-overlay');
         const card = document.getElementById('modal-card');
 
-        if (isCreating) {
-            card.innerHTML = renderTaskFormModal();
+        const task = selectedTaskId ? currentTasks.find((t) => t.id === selectedTaskId) : null;
+        const formSuffix = isCreating ? 'new' : (task && isEditingSelected ? task.id : null);
+
+        if (formSuffix) {
+            if (renderedFormSuffix === formSuffix) {
+                refreshAssigneeOptions(formSuffix);
+            } else {
+                card.innerHTML = isCreating ? renderTaskFormModal() : renderTaskFormModal(task.id, task.data);
+                renderedFormSuffix = formSuffix;
+            }
             overlay.classList.remove('hidden');
             return;
         }
+        renderedFormSuffix = null;
 
-        const task = selectedTaskId ? currentTasks.find((t) => t.id === selectedTaskId) : null;
         if (!task) {
             overlay.classList.add('hidden');
             card.innerHTML = '';
             return;
         }
 
-        card.innerHTML = isEditingSelected
-            ? renderTaskFormModal(task.id, task.data)
-            : renderTaskViewModal(task.id, task.data);
+        card.innerHTML = renderTaskViewModal(task.id, task.data);
         overlay.classList.remove('hidden');
+    }
+
+    function refreshAssigneeOptions(idSuffix) {
+        const select = document.getElementById(`task-assignee-${idSuffix}`);
+        if (select) select.innerHTML = renderMemberSelectOptions(select.value || null);
     }
 
     function renderTaskViewModal(id, data) {
