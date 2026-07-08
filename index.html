@@ -402,9 +402,9 @@
         .form-row > div { flex: 1; }
         .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
-        /* --- カテゴリ管理モーダル --- */
-        .category-manage-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 16px; max-height: 40vh; overflow-y: auto; }
-        .category-manage-row {
+        /* --- 登録リスト管理モーダル（カテゴリ・担当者で共通） --- */
+        .manage-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 16px; max-height: 40vh; overflow-y: auto; }
+        .manage-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -413,8 +413,8 @@
             background: var(--surface-alt);
             border-radius: var(--radius-sm);
         }
-        .category-manage-add { display: flex; gap: 8px; }
-        .category-manage-add input { flex: 1; }
+        .manage-add { display: flex; gap: 8px; }
+        .manage-add input { flex: 1; }
 
         /* --- モバイル：テーブル→カード --- */
         @media (max-width: 720px) {
@@ -463,6 +463,7 @@
             <div class="search-box"><input type="text" id="search-input" placeholder="タスクを検索"></div>
             <div id="status-chips" class="chip-group"></div>
             <select id="assignee-filter" title="担当者で絞り込み"></select>
+            <button id="manage-assignees-btn" class="btn btn-ghost btn-sm">担当者管理</button>
             <select id="category-filter" title="カテゴリで絞り込み"></select>
             <button id="manage-categories-btn" class="btn btn-ghost btn-sm">カテゴリ管理</button>
             <div class="view-toggle" id="view-toggle">
@@ -511,10 +512,10 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, query, onSnapshot, deleteDoc, updateDoc, doc, setDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, query, onSnapshot, deleteDoc, updateDoc, doc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     // Wikiプロジェクト（Kazuki-Murasawa.github.io）と同じFirebaseプロジェクトを共用する。
-    // コレクションは tasks / task_users を新設し、既存の wiki_* とは分離している。
+    // コレクションは tasks / categories / assignees を新設し、既存の wiki_* とは分離している。
     const firebaseConfig = {
         apiKey: "AIzaSyB6LzMo95UjoFkGncbRqU7Kis4fGCmK3Pw",
         authDomain: "my-sync-todo.firebaseapp.com",
@@ -534,29 +535,31 @@
 
     let currentUser = null;
     let unsubscribeTasks = null;
-    let unsubscribeUsers = null;
     let unsubscribeCategories = null;
+    let unsubscribeAssignees = null;
     let currentTasks = [];
-    let currentMembers = [];
     let currentCategories = []; // { id, name } の配列。事前登録制（categoriesコレクション）
+    let currentAssignees = [];  // { id, name } の配列。事前登録制（assigneesコレクション）
 
     // --- 画面状態 ---
     let selectedTaskId = null;      // '#/task/<id>' で詳細モーダルを開く
     let isCreating = false;         // '#/new' で新規作成モーダルを開く
     let isManagingCategories = false; // '#/categories' でカテゴリ管理モーダルを開く
+    let isManagingAssignees = false;  // '#/assignees' で担当者管理モーダルを開く
     let isEditingSelected = false;
     let searchQuery = '';
     let statusFilter = null;        // null | 'todo' | 'in_progress' | 'done' | 'attention'
-    let assigneeFilter = '';        // '' = 全員 | 'none' = 未アサイン | uid
+    let assigneeFilter = '';        // '' = 全員 | 'none' = 未アサイン | 担当者名
     let categoryFilter = '';        // '' = すべて | 'none' = 未分類 | カテゴリ文字列
     let viewMode = localStorage.getItem('gtm_view_mode') === 'board' ? 'board' : 'list'; // 'list' | 'board'
 
-    // --- ハッシュルーティング（#/task/<id> / #/new / #/categories） ---
+    // --- ハッシュルーティング（#/task/<id> / #/new / #/categories / #/assignees） ---
     function parseHash() {
         const hash = location.hash;
         selectedTaskId = null;
         isCreating = false;
         isManagingCategories = false;
+        isManagingAssignees = false;
 
         if (hash.startsWith('#/task/')) {
             selectedTaskId = decodeURIComponent(hash.slice('#/task/'.length));
@@ -564,6 +567,8 @@
             isCreating = true;
         } else if (hash === '#/categories') {
             isManagingCategories = true;
+        } else if (hash === '#/assignees') {
+            isManagingAssignees = true;
         }
         isEditingSelected = false;
     }
@@ -591,6 +596,7 @@
         renderView();
     };
     document.getElementById('manage-categories-btn').onclick = () => { location.hash = '#/categories'; };
+    document.getElementById('manage-assignees-btn').onclick = () => { location.hash = '#/assignees'; };
     document.getElementById('view-toggle').addEventListener('click', (e) => {
         const btn = e.target.closest('.view-toggle-btn');
         if (!btn) return;
@@ -602,7 +608,7 @@
         if (e.target === e.currentTarget) closeModal();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && (selectedTaskId || isCreating || isManagingCategories)) closeModal();
+        if (e.key === 'Escape' && (selectedTaskId || isCreating || isManagingCategories || isManagingAssignees)) closeModal();
     });
     window.closeModal = () => {
         if (location.hash) location.hash = '';
@@ -612,10 +618,9 @@
         if (user) {
             currentUser = user;
             showApp(user);
-            upsertMemberProfile(user);
             fetchTasks();
-            fetchMembers();
             fetchCategories();
+            fetchAssignees();
         } else {
             currentUser = null;
             hideApp();
@@ -636,8 +641,8 @@
         document.getElementById('new-task-btn').classList.add('hidden');
         document.getElementById('app-content').classList.add('hidden');
         currentTasks = [];
-        currentMembers = [];
         currentCategories = [];
+        currentAssignees = [];
         searchQuery = '';
         statusFilter = null;
         assigneeFilter = '';
@@ -647,70 +652,66 @@
         document.getElementById('modal-overlay').classList.add('hidden');
         if (location.hash) location.hash = '';
         if (unsubscribeTasks) unsubscribeTasks();
-        if (unsubscribeUsers) unsubscribeUsers();
         if (unsubscribeCategories) unsubscribeCategories();
+        if (unsubscribeAssignees) unsubscribeAssignees();
     }
 
-    // --- メンバー一覧（担当者アサインの選択肢として、ログインしたことがある全員を保持） ---
+    // --- カテゴリ・担当者（どちらも事前登録制。グループで共有する名前リストとして同じ形で扱う） ---
 
-    async function upsertMemberProfile(user) {
-        try {
-            await setDoc(doc(db, "task_users", user.uid), {
-                uid: user.uid,
-                displayName: user.displayName,
-                email: user.email,
-                updatedAt: new Date()
-            }, { merge: true });
-        } catch (error) {
-            console.error('メンバープロフィールの更新に失敗しました', error);
-        }
-    }
-
-    function fetchMembers() {
-        const q = query(collection(db, "task_users"));
-        unsubscribeUsers = onSnapshot(q, (snapshot) => {
-            currentMembers = snapshot.docs.map((doc) => doc.data());
-            renderAssigneeFilter();
-            renderModal();
+    function watchNamedList(collectionName, onUpdate) {
+        const q = query(collection(db, collectionName), orderBy("name"));
+        return onSnapshot(q, (snapshot) => {
+            onUpdate(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         });
     }
 
-    // --- カテゴリ一覧（事前登録制。categoriesコレクションをグループで共有） ---
+    async function addNamedItem(collectionName, inputId, existingItems, errorLabel) {
+        if (!currentUser) return;
+        const input = document.getElementById(inputId);
+        const name = input.value.trim();
+        if (!name || existingItems.some((item) => item.name === name)) {
+            input.value = '';
+            return;
+        }
+        try {
+            await addDoc(collection(db, collectionName), { name, creatorUid: currentUser.uid, createdAt: new Date() });
+            input.value = '';
+        } catch (error) {
+            alert(`${errorLabel}の追加に失敗しました: ` + error.message);
+        }
+    }
+
+    async function deleteNamedItem(collectionName, id, errorLabel) {
+        if (!currentUser) return;
+        if (!confirm(`この${errorLabel}を削除しますか？（すでに設定済みのタスクの表示は残ります）`)) return;
+        try {
+            await deleteDoc(doc(db, collectionName, id));
+        } catch (error) {
+            alert(`${errorLabel}の削除に失敗しました: ` + error.message);
+        }
+    }
 
     function fetchCategories() {
-        const q = query(collection(db, "categories"), orderBy("name"));
-        unsubscribeCategories = onSnapshot(q, (snapshot) => {
-            currentCategories = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        unsubscribeCategories = watchNamedList("categories", (items) => {
+            currentCategories = items;
             renderCategoryFilter();
             renderModal();
         });
     }
 
-    window.addCategory = async () => {
-        if (!currentUser) return;
-        const input = document.getElementById('new-category-input');
-        const name = input.value.trim();
-        if (!name || currentCategories.some((c) => c.name === name)) {
-            input.value = '';
-            return;
-        }
-        try {
-            await addDoc(collection(db, "categories"), { name, creatorUid: currentUser.uid, createdAt: new Date() });
-            input.value = '';
-        } catch (error) {
-            alert('カテゴリの追加に失敗しました: ' + error.message);
-        }
-    };
+    window.addCategory = () => addNamedItem("categories", 'new-category-input', currentCategories, 'カテゴリ');
+    window.deleteCategory = (id) => deleteNamedItem("categories", id, 'カテゴリ');
 
-    window.deleteCategory = async (id) => {
-        if (!currentUser) return;
-        if (!confirm('このカテゴリを削除しますか？（すでに設定済みのタスクの表示は残ります）')) return;
-        try {
-            await deleteDoc(doc(db, "categories", id));
-        } catch (error) {
-            alert('カテゴリの削除に失敗しました: ' + error.message);
-        }
-    };
+    function fetchAssignees() {
+        unsubscribeAssignees = watchNamedList("assignees", (items) => {
+            currentAssignees = items;
+            renderAssigneeFilter();
+            renderModal();
+        });
+    }
+
+    window.addAssignee = () => addNamedItem("assignees", 'new-assignee-input', currentAssignees, '担当者');
+    window.deleteAssignee = (id) => deleteNamedItem("assignees", id, '担当者');
 
     // --- タスクの購読 ---
 
@@ -849,21 +850,21 @@
         renderView();
     });
 
-    // --- 担当者フィルタ ---
+    // --- 担当者・カテゴリフィルタ（どちらも事前登録済みリストを選択肢にする） ---
 
-    function renderAssigneeFilter() {
-        const select = document.getElementById('assignee-filter');
-        const members = [...currentMembers].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'));
-        select.innerHTML = `<option value="">担当者: 全員</option><option value="none"${assigneeFilter === 'none' ? ' selected' : ''}>未アサイン</option>`
-            + members.map((m) => `<option value="${m.uid}"${assigneeFilter === m.uid ? ' selected' : ''}>${escapeHtml(m.displayName)}</option>`).join('');
+    function renderNamedFilterOptions(items, filterValue, allLabel, noneLabel) {
+        return `<option value="">${allLabel}</option><option value="none"${filterValue === 'none' ? ' selected' : ''}>${noneLabel}</option>`
+            + items.map((item) => `<option value="${escapeAttr(item.name)}"${filterValue === item.name ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
     }
 
-    // --- カテゴリフィルタ（事前登録済みのcategoriesコレクションを選択肢にする） ---
+    function renderAssigneeFilter() {
+        document.getElementById('assignee-filter').innerHTML =
+            renderNamedFilterOptions(currentAssignees, assigneeFilter, '担当者: 全員', '未アサイン');
+    }
 
     function renderCategoryFilter() {
-        const select = document.getElementById('category-filter');
-        select.innerHTML = `<option value="">カテゴリ: すべて</option><option value="none"${categoryFilter === 'none' ? ' selected' : ''}>未分類</option>`
-            + currentCategories.map((c) => `<option value="${escapeAttr(c.name)}"${categoryFilter === c.name ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+        document.getElementById('category-filter').innerHTML =
+            renderNamedFilterOptions(currentCategories, categoryFilter, 'カテゴリ: すべて', '未分類');
     }
 
     // --- タスクテーブル ---
@@ -873,8 +874,8 @@
         let tasks = currentTasks;
         if (statusFilter === 'attention') tasks = tasks.filter(isAttention);
         else if (statusFilter) tasks = tasks.filter(({ data }) => data.status === statusFilter);
-        if (assigneeFilter === 'none') tasks = tasks.filter(({ data }) => !data.assigneeUid);
-        else if (assigneeFilter) tasks = tasks.filter(({ data }) => data.assigneeUid === assigneeFilter);
+        if (assigneeFilter === 'none') tasks = tasks.filter(({ data }) => !data.assigneeName);
+        else if (assigneeFilter) tasks = tasks.filter(({ data }) => data.assigneeName === assigneeFilter);
         if (categoryFilter === 'none') tasks = tasks.filter(({ data }) => !data.category);
         else if (categoryFilter) tasks = tasks.filter(({ data }) => data.category === categoryFilter);
         if (q) tasks = tasks.filter(({ data }) => data.title.toLowerCase().includes(q) || (data.description || '').toLowerCase().includes(q));
@@ -911,7 +912,7 @@
                 <td class="cell-status">
                     <select class="status-select badge-${data.status}" data-id="${id}" title="ステータスを変更">${statusOptions}</select>
                 </td>
-                <td class="cell-assignee${data.assigneeUid ? '' : ' unassigned'}">${escapeHtml(data.assigneeName || '未アサイン')}</td>
+                <td class="cell-assignee${data.assigneeName ? '' : ' unassigned'}">${escapeHtml(data.assigneeName || '未アサイン')}</td>
                 <td class="cell-due"><span class="badge ${due.className}">${due.label}</span></td>
             </tr>`;
         }).join('');
@@ -962,7 +963,7 @@
                     <div class="board-card-title">${escapeHtml(data.title)}</div>
                     ${data.category ? `<div class="board-card-badges"><span class="badge badge-category">${escapeHtml(data.category)}</span></div>` : ''}
                     <div class="board-card-meta">
-                        <span class="cell-assignee${data.assigneeUid ? '' : ' unassigned'}">${escapeHtml(data.assigneeName || '未アサイン')}</span>
+                        <span class="cell-assignee${data.assigneeName ? '' : ' unassigned'}">${escapeHtml(data.assigneeName || '未アサイン')}</span>
                         <span class="badge ${due.className}">${due.label}</span>
                     </div>
                     <select class="status-select badge-${data.status} board-card-select" data-id="${id}" title="ステータスを変更">${statusOptions}</select>
@@ -1017,7 +1018,7 @@
 
     // 表示中のフォームのidサフィックス。Firestoreスナップショットのたびに renderModal() が
     // 呼ばれるため、フォーム表示中に innerHTML を書き直すと入力中の内容が消える。
-    // 同じフォームを表示し続ける間は担当者の選択肢だけを最新化する。
+    // 同じフォームを表示し続ける間は担当者・カテゴリの選択肢だけを最新化する。
     let renderedFormSuffix = null;
 
     function renderModal() {
@@ -1027,15 +1028,18 @@
         const task = selectedTaskId ? currentTasks.find((t) => t.id === selectedTaskId) : null;
         const formSuffix = isCreating ? 'new'
             : isManagingCategories ? 'categories'
+            : isManagingAssignees ? 'assignees'
             : (task && isEditingSelected ? task.id : null);
 
         if (formSuffix) {
             if (renderedFormSuffix === formSuffix) {
-                if (formSuffix === 'categories') refreshCategoryManageList();
+                if (formSuffix === 'categories') refreshManageList('category-manage-list', currentCategories, 'deleteCategory');
+                else if (formSuffix === 'assignees') refreshManageList('assignee-manage-list', currentAssignees, 'deleteAssignee');
                 else refreshTaskFormDynamicOptions(formSuffix);
             } else {
                 card.innerHTML = isCreating ? renderTaskFormModal()
-                    : isManagingCategories ? renderCategoryManageModal()
+                    : isManagingCategories ? renderManageModal('カテゴリ管理', 'category-manage-list', currentCategories, 'deleteCategory', 'new-category-input', 'addCategory', '新しいカテゴリ名')
+                    : isManagingAssignees ? renderManageModal('担当者管理', 'assignee-manage-list', currentAssignees, 'deleteAssignee', 'new-assignee-input', 'addAssignee', '新しい担当者名')
                     : renderTaskFormModal(task.id, task.data);
                 renderedFormSuffix = formSuffix;
             }
@@ -1056,36 +1060,38 @@
 
     function refreshTaskFormDynamicOptions(idSuffix) {
         const assigneeSelect = document.getElementById(`task-assignee-${idSuffix}`);
-        if (assigneeSelect) assigneeSelect.innerHTML = renderMemberSelectOptions(assigneeSelect.value || null);
+        if (assigneeSelect) assigneeSelect.innerHTML = renderNamedSelectOptions(currentAssignees, assigneeSelect.value || null, '（未アサイン）');
         const categorySelect = document.getElementById(`task-category-${idSuffix}`);
-        if (categorySelect) categorySelect.innerHTML = renderCategorySelectOptions(categorySelect.value || null);
+        if (categorySelect) categorySelect.innerHTML = renderNamedSelectOptions(currentCategories, categorySelect.value || null, '（未分類）');
     }
 
-    function renderCategoryManageListItems() {
-        if (currentCategories.length === 0) return '<p class="text-muted">まだカテゴリがありません。</p>';
-        return currentCategories.map((c) =>
-            `<div class="category-manage-row">
-                <span>${escapeHtml(c.name)}</span>
-                <button onclick="deleteCategory('${c.id}')" class="btn btn-danger btn-sm">削除</button>
+    // --- カテゴリ管理・担当者管理モーダル（どちらも事前登録リストの追加・削除UIとして共通化） ---
+
+    function renderManageListItems(items, deleteHandlerName) {
+        if (items.length === 0) return '<p class="text-muted">まだ登録がありません。</p>';
+        return items.map((item) =>
+            `<div class="manage-row">
+                <span>${escapeHtml(item.name)}</span>
+                <button onclick="${deleteHandlerName}('${item.id}')" class="btn btn-danger btn-sm">削除</button>
             </div>`
         ).join('');
     }
 
-    function refreshCategoryManageList() {
-        const list = document.getElementById('category-manage-list');
-        if (list) list.innerHTML = renderCategoryManageListItems();
+    function refreshManageList(listId, items, deleteHandlerName) {
+        const list = document.getElementById(listId);
+        if (list) list.innerHTML = renderManageListItems(items, deleteHandlerName);
     }
 
-    function renderCategoryManageModal() {
+    function renderManageModal(title, listId, items, deleteHandlerName, inputId, addHandlerName, placeholder) {
         return `
             <div class="modal-header">
-                <h2>カテゴリ管理</h2>
+                <h2>${title}</h2>
                 <button class="modal-close" onclick="closeModal()" aria-label="閉じる">×</button>
             </div>
-            <div id="category-manage-list" class="category-manage-list">${renderCategoryManageListItems()}</div>
-            <div class="category-manage-add">
-                <input type="text" id="new-category-input" placeholder="新しいカテゴリ名">
-                <button onclick="addCategory()" class="btn btn-primary btn-sm">追加</button>
+            <div id="${listId}" class="manage-list">${renderManageListItems(items, deleteHandlerName)}</div>
+            <div class="manage-add">
+                <input type="text" id="${inputId}" placeholder="${placeholder}">
+                <button onclick="${addHandlerName}()" class="btn btn-primary btn-sm">追加</button>
             </div>
             <div class="form-actions">
                 <button onclick="closeModal()" class="btn btn-ghost">閉じる</button>
@@ -1118,17 +1124,10 @@
         `;
     }
 
-    function renderMemberSelectOptions(selectedUid) {
-        const options = [...currentMembers]
-            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'))
-            .map((m) => `<option value="${m.uid}"${m.uid === selectedUid ? ' selected' : ''}>${escapeHtml(m.displayName)}</option>`);
-        return `<option value=""${!selectedUid ? ' selected' : ''}>（未アサイン）</option>` + options.join('');
-    }
-
-    function renderCategorySelectOptions(selectedName) {
-        const options = currentCategories.map((c) =>
-            `<option value="${escapeAttr(c.name)}"${c.name === selectedName ? ' selected' : ''}>${escapeHtml(c.name)}</option>`);
-        return `<option value=""${!selectedName ? ' selected' : ''}>（未分類）</option>` + options.join('');
+    function renderNamedSelectOptions(items, selectedName, emptyLabel) {
+        const options = items.map((item) =>
+            `<option value="${escapeAttr(item.name)}"${item.name === selectedName ? ' selected' : ''}>${escapeHtml(item.name)}</option>`);
+        return `<option value=""${!selectedName ? ' selected' : ''}>${emptyLabel}</option>` + options.join('');
     }
 
     function renderStatusSelectOptions(selectedStatus) {
@@ -1151,7 +1150,7 @@
         const category = isEdit ? (data.category || '') : '';
         const description = isEdit ? (data.description || '') : '';
         const status = isEdit ? data.status : 'todo';
-        const assigneeUid = isEdit ? (data.assigneeUid || '') : '';
+        const assigneeName = isEdit ? (data.assigneeName || '') : '';
         const dueValue = isEdit ? toDateInputValue(data.dueDate) : '';
         const onCancelAttr = isEdit ? 'cancelEdit()' : 'closeModal()';
         const onSaveAttr = isEdit ? `saveEdit('${id}')` : 'submitNewTask()';
@@ -1167,7 +1166,7 @@
                 <input type="text" id="task-title-${idSuffix}" value="${escapeAttr(title)}" placeholder="例：合宿の宿を予約する">
 
                 <label class="field-label" for="task-category-${idSuffix}">カテゴリ</label>
-                <select id="task-category-${idSuffix}">${renderCategorySelectOptions(category)}</select>
+                <select id="task-category-${idSuffix}">${renderNamedSelectOptions(currentCategories, category, '（未分類）')}</select>
 
                 <label class="field-label" for="task-description-${idSuffix}">説明</label>
                 <textarea id="task-description-${idSuffix}" placeholder="補足やメモ（任意）">${escapeHtml(description)}</textarea>
@@ -1179,7 +1178,7 @@
                     </div>
                     <div>
                         <label class="field-label" for="task-assignee-${idSuffix}">担当者</label>
-                        <select id="task-assignee-${idSuffix}">${renderMemberSelectOptions(assigneeUid)}</select>
+                        <select id="task-assignee-${idSuffix}">${renderNamedSelectOptions(currentAssignees, assigneeName, '（未アサイン）')}</select>
                     </div>
                 </div>
 
@@ -1209,11 +1208,10 @@
         const category = document.getElementById(`task-category-${idSuffix}`).value.trim() || null;
         const description = document.getElementById(`task-description-${idSuffix}`).value;
         const status = document.getElementById(`task-status-${idSuffix}`).value;
-        const assigneeUid = document.getElementById(`task-assignee-${idSuffix}`).value || null;
-        const assigneeName = assigneeUid ? (currentMembers.find((m) => m.uid === assigneeUid)?.displayName || null) : null;
+        const assigneeName = document.getElementById(`task-assignee-${idSuffix}`).value.trim() || null;
         const dueRaw = document.getElementById(`task-due-${idSuffix}`).value;
         const dueDate = dueRaw ? new Date(`${dueRaw}T00:00:00`) : null;
-        return { title, category, description, status, assigneeUid, assigneeName, dueDate };
+        return { title, category, description, status, assigneeName, dueDate };
     }
 
     // --- タスクの作成・編集・削除（グループ共同編集：ログイン済みなら誰でも編集・削除・ステータス変更可） ---

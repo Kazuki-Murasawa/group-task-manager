@@ -4,25 +4,30 @@
 ここを読めば現状と次にやることが分かるようにする。詳細な実装の経緯より「今の構造がどうなっているか」を優先して書く。
 
 **現状（2026-07-08時点）: `index.html` 実装済み・動作確認完了。テーブル型UI不具合修正、リスト⇔カンバン切り替え、
-カテゴリ分け（事前登録制）まで実装・動作確認済み。**
+カテゴリ分け・担当者（どちらも事前登録制）まで実装・動作確認済み。**
 **本番URL: https://kazuki-murasawa.github.io/group-task-manager/ （GitHub Pages、`main` ブランチのルートから配信）**
 
-### 2026-07-08 実装・動作確認済み：カテゴリ分け機能（事前登録制）
+### 2026-07-08 実装・動作確認済み：カテゴリ・担当者を事前登録制に統一
 
-タスクに任意の1カテゴリを設定できる機能を追加。自由入力ではなく **事前登録制**（グループで
-共有するカテゴリ一覧から選ぶ方式）を採用。
+タスクの「カテゴリ」「担当者」はどちらも自由入力ではなく **事前登録制**（グループで共有する
+一覧から選ぶ方式）で統一した。実装がほぼ同一のため、共通ヘルパーにまとめてある。
 
-- 新規Firestoreコレクション `categories`（`name` / `creatorUid` / `createdAt`）を追加。
-  `task_users` と同様グループ全員で共有する一覧
-- ツールバーに「カテゴリ管理」ボタンを追加（`#/categories` ルート）。管理モーダルで
-  カテゴリの追加・削除ができる（`window.addCategory` / `window.deleteCategory`）
-- タスク作成・編集フォームのカテゴリ欄は `currentCategories` から選ぶセレクト
-  （`renderCategorySelectOptions()`）。担当者セレクトと同じパターン
-- カテゴリを削除しても、既存タスク側は `category` に名前の文字列をそのまま保存している
-  （担当者の `assigneeName` と同じ非正規化方式）ため、削除後もタスク側の表示は残る
-- ツールバーのカテゴリ絞り込みセレクト、テーブル行・ボードカード・詳細モーダルへの
-  カテゴリバッジ表示も対応済み
-- **Firestoreセキュリティルールに `categories` の追加が必要**（下記「解決済み」節に追記）
+- 新規Firestoreコレクション `categories`（`name` / `creatorUid` / `createdAt`）、
+  `assignees`（同じ形）を追加。どちらもグループ全員で共有する一覧
+- ツールバーに「カテゴリ管理」「担当者管理」ボタンを追加（`#/categories` / `#/assignees` ルート）。
+  管理モーダルで追加・削除ができる（`window.addCategory` / `deleteCategory` / `addAssignee` / `deleteAssignee`）
+- タスク作成・編集フォームのカテゴリ・担当者欄はどちらも登録済み一覧から選ぶセレクト
+  （`renderNamedSelectOptions()`）
+- 購読・追加・削除・フィルタ描画・管理モーダル描画のロジックはカテゴリ／担当者で共通化
+  （`watchNamedList()` / `addNamedItem()` / `deleteNamedItem()` / `renderNamedFilterOptions()` /
+  `renderManageModal()` など。`{ id, name }` の配列を扱う汎用関数として実装）
+- カテゴリ・担当者を削除しても、既存タスク側は `category` / `assigneeName` に名前の文字列を
+  そのまま保存している（非正規化）ため、削除後もタスク側の表示は残る
+- ツールバーの絞り込みセレクト、テーブル行・ボードカード・詳細モーダルへのバッジ表示も対応済み
+- **担当者を事前登録制にしたことに伴い、`task_users` コレクション関連（ログイン時の
+  プロフィール自己登録・購読、`assigneeUid`）は使われなくなったため削除した**。
+  今は担当者はログインの有無に関係なく任意の名前を登録・アサインできる
+- **Firestoreセキュリティルールに `categories` / `assignees` の追加が必要**（下記「解決済み」節に追記）
 
 ### 2026-07-08 実装・動作確認済み：リスト⇔カンバン切り替え
 
@@ -82,17 +87,25 @@ match /task_users/{uid} {
 }
 ```
 
-### ✅ 解決済み（2026-07-08）：`categories` コレクションのセキュリティルール追加
+### ✅ 解決済み（2026-07-08）：`categories` / `assignees` コレクションのセキュリティルール追加
 
-カテゴリ管理機能の追加に伴い、上記2ブロックに加えて以下を追加・公開済み（追加前は
-カテゴリの追加・削除が `permission-denied` で失敗していた）：
+カテゴリ・担当者の事前登録制対応に伴い、上記2ブロックに加えて以下を追加・公開済み（追加前は
+それぞれの追加・削除が `permission-denied` で失敗していた）：
 
 ```
 match /categories/{categoryId} {
   allow read: if request.auth != null;
   allow create, delete: if request.auth != null;
 }
+
+match /assignees/{assigneeId} {
+  allow read: if request.auth != null;
+  allow create, delete: if request.auth != null;
+}
 ```
+
+なお `task_users` のルールはアプリ側で使わなくなったが、Firestore Console側のルールは
+そのまま残っている（実害はないため未削除。整理したい場合はConsole側で手動削除）。
 
 
 ## プロジェクト概要
@@ -125,19 +138,23 @@ match /categories/{categoryId} {
     非正規化しているため、カテゴリ削除後もタスク側の表示はそのまま残る）
   - `description`（詳細、プレーンテキストのみ。Markdown未対応）
   - `status`（`todo` / `in_progress` / `done`）
-  - `assigneeUid` / `assigneeName`（担当者。null許容＝未アサイン）
+  - `assigneeName`（担当者名の文字列。`assignees`コレクションから選択、null許容＝未アサイン。
+    カテゴリと同じ非正規化方式。ログインの有無に関係なく任意の名前を登録・アサインできる）
   - `dueDate`（期限。Firestore Timestamp、null許容）
   - `creatorUid` / `creatorName` / `createdAt` / `updatedAt`
-- `task_users`（ドキュメントID＝uid）— ログイン時に `setDoc(merge)` で自分のプロフィール
-  （`uid` / `displayName` / `email` / `updatedAt`）を自己登録し、担当者ドロップダウンの
-  選択肢として全員分を読み取る（Wikiには存在しない新規コレクション）
 - `categories`（ドキュメントID＝自動採番）— `name` / `creatorUid` / `createdAt`。
   グループで共有するカテゴリの事前登録リスト。「カテゴリ管理」モーダル（`#/categories`）
   から追加・削除する
+- `assignees`（ドキュメントID＝自動採番）— `categories`と同じ形（`name` / `creatorUid` / `createdAt`）。
+  グループで共有する担当者名の事前登録リスト。「担当者管理」モーダル（`#/assignees`）から追加・削除する
+- ~~`task_users`~~（廃止・2026-07-08）— 旧実装ではログイン時に自分のプロフィールを自己登録し、
+  担当者ドロップダウンの選択肢にしていたが、担当者を`assignees`による事前登録制に変更したため
+  アプリ側では使わなくなった。Firestore Console側のルール・既存データは残存
 
 ## 中核機能（実装済み）
 
-1. **タスクのCRUD＋担当者アサイン** — 作成・編集・削除、担当者を`task_users`から選択
+1. **タスクのCRUD＋担当者アサイン** — 作成・編集・削除、担当者は`assignees`コレクションに
+   事前登録した名前から選択（ログイン不要な人も担当者にできる）
 2. **ステータス管理** — 未着手／進行中／完了の3ステータス。KPIタイル・ステータスチップで絞り込み。
    リスト表示とカンバンボード表示を切り替え可能（トグルはツールバー右端、選択状態は
    `localStorage`に保存）
@@ -158,8 +175,10 @@ match /categories/{categoryId} {
   で行う
 - 本番公開ドメインでログインさせるには、Firebase Console → Authentication → Settings →
   承認済みドメイン に該当ドメインを追加登録する必要がある
-- Firestoreのセキュリティルールに `tasks` / `task_users` を追加登録するまではタスク作成が
-  `permission-denied` で失敗する（2026-07-06に発覚、2026-07-07にルール追加で解決済み）
+- Firestoreのセキュリティルールに各コレクション（`tasks` / `categories` / `assignees`）を
+  追加登録するまでは、そのコレクションへの書き込みが `permission-denied` で失敗する
+  （`tasks`は2026-07-06に発覚、2026-07-07にルール追加で解決済み。`categories` / `assignees`は
+  2026-07-08にルール追加で解決済み）
 - ローカル動作確認は `python -m http.server` を **Wikiリポジトリとは別ポート**で起動すること。
   同じ8080で両方を試すと、後から起動した側がポート競合で立ち上がらず、先に起動していた
   Wiki側のサーバーの応答を誤って掴んでしまう（2026-07-06に実際に発生）。本プロジェクトは
